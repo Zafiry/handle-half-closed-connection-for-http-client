@@ -1,0 +1,49 @@
+diff --git a/Lib/http/client.py b/Lib/http/client.py
+index a353716a850..fb99083c813 100644
+--- a/Lib/http/client.py
++++ b/Lib/http/client.py
+@@ -1024,6 +1024,33 @@ def close(self):
+                 self.__response = None
+                 response.close()
+ 
++    def isTcpConnClosedByRemote(self):
++        sock = self.sock
++        if sock is None:
++            return False
++
++        TCP_STATE_MAP = {
++            1: "TCP_ESTABLISHED",
++            2: "TCP_SYN_SENT",
++            3: "TCP_SYN_RECV",
++            4: "TCP_FIN_WAIT1",
++            5: "TCP_FIN_WAIT2",
++            6: "TCP_TIME_WAIT",
++            7: "TCP_CLOSE",
++            8: "TCP_CLOSE_WAIT",
++            9: "TCP_LAST_ACK",
++            10: "TCP_LISTEN",
++            11: "TCP_CLOSING"
++        }
++        tcp_info = socket.getsockopt(socket.SOL_TCP, socket.TCP_INFO, 1024)
++        tcpi_state = struct.unpack('B', tcp_info[:1])[0]
++        tcp_conn_state_str = TCP_STATE_MAP.get(tcpi_state, "UNKNOWN_STATE")
++        return tcp_conn_state_str == "TCP_CLOSE_WAIT"
++
++    def clearHalfClosedConn(self):
++        if self.isTcpConnClosedByRemote():
++            self.close()
++
+     def send(self, data):
+         """Send `data' to the server.
+         ``data`` can be a string object, a bytes object, an array object, a
+@@ -1172,6 +1199,10 @@ def putrequest(self, method, url, skip_host=False,
+         else:
+             raise CannotSendRequest(self.__state)
+ 
++        # Check whether TCP connection was closed by remote,
++        # just close it if true.
++        self.clearHalfClosedConn()
++
+         self._validate_method(method)
+ 
+         # Save the method for use later in the response phase
